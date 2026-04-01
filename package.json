@@ -1,7 +1,7 @@
 {
-  "name": "reportbot",
+  "name": "dentalbot",
   "version": "0.1.0",
-  "description": "Scheduled Report & Alert Pipelines for business users",
+  "description": "AI Receptionist for Dental Practices - SMS & Web Chat",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
@@ -12,20 +12,22 @@
     "db:migrate": "node src/db/migrate.js"
   },
   "keywords": [
-    "automation",
-    "reports",
-    "alerts",
-    "scheduling"
+    "dental",
+    "receptionist",
+    "ai",
+    "sms",
+    "chat",
+    "appointments"
   ],
   "author": "EFF (Efficient Frontier)",
   "license": "MIT",
   "type": "module",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "node-cron": "^4.2.1",
-    "nodemailer": "^8.0.4",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "twilio": "^5.5.0"
   },
   "devDependencies": {
     "eslint": "^10.1.0"
