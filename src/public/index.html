@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReportBot — Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
+    header { background: #1a1a2e; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
+    header h1 { font-size: 20px; font-weight: 600; }
+    .container { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); padding: 20px; margin-bottom: 16px; }
+    .card h2 { font-size: 16px; margin-bottom: 12px; color: #1a1a2e; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #eee; }
+    th { background: #f9f9f9; font-weight: 600; font-size: 12px; text-transform: uppercase; color: #666; }
+    .badge { padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+    .badge-success { background: #d4edda; color: #155724; }
+    .badge-failed { background: #f8d7da; color: #721c24; }
+    .badge-running { background: #fff3cd; color: #856404; }
+    .badge-pending { background: #e2e3e5; color: #383d41; }
+    .badge-enabled { background: #cce5ff; color: #004085; }
+    .badge-disabled { background: #e2e3e5; color: #6c757d; }
+    button { padding: 6px 14px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .btn-primary { background: #1a1a2e; color: #fff; }
+    .btn-primary:hover { background: #16213e; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-run { background: #28a745; color: #fff; }
+    .btn-run:hover { background: #218838; }
+    .btn-danger { background: #dc3545; color: #fff; }
+    .btn-danger:hover { background: #c82333; }
+    .actions { display: flex; gap: 6px; }
+    .empty { text-align: center; padding: 40px; color: #999; }
+    dialog { border: none; border-radius: 8px; padding: 24px; max-width: 560px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
+    dialog::backdrop { background: rgba(0,0,0,.4); }
+    .form-group { margin-bottom: 12px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+    .form-group textarea { height: 80px; font-family: monospace; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ReportBot</h1>
+    <button class="btn-primary" onclick="openCreateDialog()">+ New Pipeline</button>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h2>Pipelines</h2>
+      <div id="pipelines-table"></div>
+    </div>
+
+    <div class="card">
+      <h2>Recent Runs</h2>
+      <div id="runs-table"></div>
+    </div>
+  </div>
+
+  <dialog id="create-dialog">
+    <h2 style="margin-bottom:16px">Create Pipeline</h2>
+    <form id="pipeline-form" onsubmit="createPipeline(event)">
+      <div class="form-group">
+        <label>Name</label>
+        <input name="name" required placeholder="Daily Sales Report">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Schedule (cron)</label>
+          <input name="schedule" required placeholder="0 9 * * *" title="Cron expression">
+        </div>
+        <div class="form-group">
+          <label>Timezone</label>
+          <input name="timezone" value="UTC" placeholder="America/New_York">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Source Type</label>
+          <select name="source_type">
+            <option value="postgres">PostgreSQL</option>
+            <option value="google_sheets">Google Sheets</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Delivery Type</label>
+          <select name="delivery_type">
+            <option value="email">Email</option>
+            <option value="slack">Slack</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Source Config (JSON)</label>
+        <textarea name="source_config" placeholder='{"connection_string": "postgresql://..."}'></textarea>
+      </div>
+      <div class="form-group">
+        <label>Query</label>
+        <textarea name="query_text" required placeholder="SELECT * FROM sales WHERE date = CURRENT_DATE"></textarea>
+      </div>
+      <div class="form-group">
+        <label>Delivery Config (JSON)</label>
+        <textarea name="delivery_config" placeholder='{"to": "team@example.com"}'></textarea>
+      </div>
+      <div class="form-group">
+        <label>Alert Condition (optional)</label>
+        <input name="alert_condition" placeholder="total_revenue < 1000">
+      </div>
+      <div class="form-actions">
+        <button type="button" onclick="document.getElementById('create-dialog').close()">Cancel</button>
+        <button type="submit" class="btn-primary">Create</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const API = '/api';
+
+    async function load() {
+      const [pipelines, runs] = await Promise.all([
+        fetch(`${API}/pipelines`).then(r => r.json()),
+        fetch(`${API}/runs`).then(r => r.json()),
+      ]);
+      renderPipelines(pipelines);
+      renderRuns(runs);
+    }
+
+    function renderPipelines(pipelines) {
+      const el = document.getElementById('pipelines-table');
+      if (!pipelines.length) { el.innerHTML = '<p class="empty">No pipelines yet. Create one to get started.</p>'; return; }
+      el.innerHTML = `<table>
+        <tr><th>Name</th><th>Schedule</th><th>Source</th><th>Delivery</th><th>Status</th><th>Actions</th></tr>
+        ${pipelines.map(p => `<tr>
+          <td>${esc(p.name)}</td>
+          <td><code>${esc(p.schedule)}</code></td>
+          <td>${esc(p.source_type)}</td>
+          <td>${esc(p.delivery_type)}</td>
+          <td><span class="badge ${p.enabled ? 'badge-enabled' : 'badge-disabled'}">${p.enabled ? 'enabled' : 'disabled'}</span></td>
+          <td class="actions">
+            <button class="btn-sm btn-run" onclick="triggerRun('${p.id}')">Run</button>
+            <button class="btn-sm btn-danger" onclick="deletePipeline('${p.id}')">Delete</button>
+          </td>
+        </tr>`).join('')}
+      </table>`;
+    }
+
+    function renderRuns(runs) {
+      const el = document.getElementById('runs-table');
+      if (!runs.length) { el.innerHTML = '<p class="empty">No runs yet.</p>'; return; }
+      el.innerHTML = `<table>
+        <tr><th>Pipeline</th><th>Status</th><th>Started</th><th>Finished</th><th>Result</th></tr>
+        ${runs.map(r => `<tr>
+          <td>${esc(r.pipeline_name)}</td>
+          <td><span class="badge badge-${r.status}">${r.status}</span></td>
+          <td>${r.started_at ? new Date(r.started_at).toLocaleString() : '-'}</td>
+          <td>${r.finished_at ? new Date(r.finished_at).toLocaleString() : '-'}</td>
+          <td>${r.error ? '<span style="color:red">' + esc(r.error).slice(0, 80) + '</span>' : r.result ? esc(JSON.stringify(r.result)) : '-'}</td>
+        </tr>`).join('')}
+      </table>`;
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    function openCreateDialog() { document.getElementById('create-dialog').showModal(); }
+
+    async function createPipeline(e) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      let sourceConfig, deliveryConfig;
+      try { sourceConfig = JSON.parse(f.get('source_config') || '{}'); } catch { alert('Invalid source config JSON'); return; }
+      try { deliveryConfig = JSON.parse(f.get('delivery_config') || '{}'); } catch { alert('Invalid delivery config JSON'); return; }
+      sourceConfig.timezone = f.get('timezone');
+
+      const body = {
+        name: f.get('name'),
+        schedule: f.get('schedule'),
+        source_type: f.get('source_type'),
+        source_config: sourceConfig,
+        query_text: f.get('query_text'),
+        delivery_type: f.get('delivery_type'),
+        delivery_config: deliveryConfig,
+        alert_condition: f.get('alert_condition') || null,
+      };
+
+      const res = await fetch(`${API}/pipelines`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      if (res.ok) { document.getElementById('create-dialog').close(); e.target.reset(); load(); }
+      else { const err = await res.json(); alert(err.error); }
+    }
+
+    async function triggerRun(id) {
+      const res = await fetch(`${API}/pipelines/${id}/run`, { method: 'POST' });
+      if (res.ok) { alert('Run completed!'); load(); }
+      else { const err = await res.json(); alert('Run failed: ' + err.error); }
+    }
+
+    async function deletePipeline(id) {
+      if (!confirm('Delete this pipeline?')) return;
+      await fetch(`${API}/pipelines/${id}`, { method: 'DELETE' });
+      load();
+    }
+
+    load();
+    setInterval(load, 15000);
+  </script>
+</body>
+</html>

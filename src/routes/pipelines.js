@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
+import { schedulePipeline, unschedulePipeline } from '../scheduler/engine.js';
+import { runPipeline } from '../pipeline/runner.js';
 
 export const pipelinesRouter = Router();
 
@@ -16,6 +18,16 @@ pipelinesRouter.get('/:id', async (req, res) => {
   res.json(rows[0]);
 });
 
+// Get runs for a pipeline
+pipelinesRouter.get('/:id/runs', async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+  const { rows } = await pool.query(
+    'SELECT * FROM pipeline_runs WHERE pipeline_id = $1 ORDER BY created_at DESC LIMIT $2',
+    [req.params.id, limit]
+  );
+  res.json(rows);
+});
+
 pipelinesRouter.post('/', async (req, res) => {
   const { name, schedule, source_type, source_config, query_text, delivery_type, delivery_config, alert_condition } = req.body;
 
@@ -29,7 +41,23 @@ pipelinesRouter.post('/', async (req, res) => {
      RETURNING *`,
     [name, schedule, source_type, source_config || {}, query_text, delivery_type, delivery_config || {}, alert_condition || null]
   );
-  res.status(201).json(rows[0]);
+
+  const pipeline = rows[0];
+  if (pipeline.enabled) schedulePipeline(pipeline);
+  res.status(201).json(pipeline);
+});
+
+// Trigger a manual run
+pipelinesRouter.post('/:id/run', async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM pipelines WHERE id = $1', [req.params.id]);
+  if (rows.length === 0) return res.status(404).json({ error: 'Pipeline not found' });
+
+  try {
+    const result = await runPipeline(rows[0]);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 pipelinesRouter.patch('/:id', async (req, res) => {
@@ -53,11 +81,19 @@ pipelinesRouter.patch('/:id', async (req, res) => {
     values
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Pipeline not found' });
-  res.json(rows[0]);
+
+  const pipeline = rows[0];
+  if (pipeline.enabled) {
+    schedulePipeline(pipeline);
+  } else {
+    unschedulePipeline(pipeline.id);
+  }
+  res.json(pipeline);
 });
 
 pipelinesRouter.delete('/:id', async (req, res) => {
   const { rowCount } = await pool.query('DELETE FROM pipelines WHERE id = $1', [req.params.id]);
   if (rowCount === 0) return res.status(404).json({ error: 'Pipeline not found' });
+  unschedulePipeline(req.params.id);
   res.status(204).end();
 });
