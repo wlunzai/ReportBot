@@ -1,4 +1,3 @@
-import 'dotenv/config';
 import { pool } from './pool.js';
 import { readdir, readFile } from 'fs/promises';
 import { join, dirname } from 'path';
@@ -6,7 +5,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-async function migrate() {
+export async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       version TEXT PRIMARY KEY,
@@ -32,13 +31,17 @@ async function migrate() {
       console.log(`  Applied: ${file}`);
     } catch (err) {
       await pool.query('ROLLBACK');
-      console.error(`  Failed: ${file}`, err.message);
-      process.exit(1);
+      throw new Error(`Migration ${file} failed: ${err.message}`);
     }
   }
 
   console.log('Migrations complete.');
-  await pool.end();
 }
 
-migrate();
+// Allow running directly: node src/db/migrate.js
+if (process.argv[1] && process.argv[1].endsWith('migrate.js')) {
+  import('dotenv/config').then(() => runMigrations().then(() => pool.end()).catch(err => {
+    console.error(err.message);
+    process.exit(1);
+  }));
+}
