@@ -1,15 +1,6 @@
-# DentalBot - AI Receptionist for Dental Practices
+# ReportBot
 
-AI-powered virtual receptionist that handles SMS and web chat for dental practices. Books appointments, answers FAQs, and escalates to human staff when needed.
-
-## Features
-
-- **SMS Channel**: Twilio webhook processes inbound patient texts
-- **Web Chat Channel**: REST API for embedding chat on practice websites
-- **Appointment Booking**: Books, reschedules, and cancels appointments with conflict detection
-- **FAQ Knowledge Base**: Per-practice configurable Q&A for common patient questions
-- **Smart Escalation**: Automatically hands off to human staff for emergencies or low-confidence situations
-- **Multi-tenant**: Each dental practice has its own config, knowledge base, and appointment calendar
+Scheduled Report & Alert Pipelines for business users. Connect your data sources, define queries, set schedules, and receive formatted reports via email or Slack.
 
 ## Quick Start
 
@@ -24,76 +15,30 @@ AI-powered virtual receptionist that handles SMS and web chat for dental practic
 # Install dependencies
 npm install
 
-# Copy and configure environment
+# Copy and configure environment variables
 cp .env.example .env
-# Set DATABASE_URL, ANTHROPIC_API_KEY, and optionally Twilio credentials
+# Edit .env with your DATABASE_URL and other config
 
 # Run database migrations
 npm run db:migrate
 
-# Start the server
+# Start the dev server (auto-restart on changes)
 npm run dev
 ```
 
-## API Endpoints
+### Environment Variables
 
-### Health
-- `GET /api/health` - Health check with DB status
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | PostgreSQL connection string | (required) |
+| `PORT` | API server port | 3000 |
+| `SMTP_HOST` | SMTP server for email delivery | - |
+| `SMTP_PORT` | SMTP port | 587 |
+| `SMTP_USER` | SMTP username | - |
+| `SMTP_PASS` | SMTP password | - |
+| `SLACK_WEBHOOK_URL` | Slack webhook for alert delivery | - |
 
-### Practices (Client Management)
-- `GET /api/practices` - List all practices
-- `POST /api/practices` - Create a practice
-- `GET /api/practices/:id` - Get practice details
-- `PATCH /api/practices/:id` - Update practice config
-- `GET /api/practices/:id/knowledge-base` - List FAQ entries
-- `POST /api/practices/:id/knowledge-base` - Add FAQ entry
-- `DELETE /api/practices/:practiceId/knowledge-base/:kbId` - Remove FAQ entry
-- `GET /api/practices/:id/appointments` - List appointments (filter by ?date=&status=)
-
-### Web Chat
-- `POST /api/chat/start` - Start a new chat session
-- `POST /api/chat/message` - Send a message
-- `GET /api/chat/history/:conversationId` - Get chat history
-
-### SMS
-- `POST /api/sms/webhook` - Twilio incoming SMS webhook
-
-### Deployment
-
-The app is containerized with Docker:
-
-```bash
-docker build -t dentalbot .
-docker run -p 3000:3000 --env-file .env dentalbot
-```
-
-## Architecture
-
-```
-src/
-  index.js          - Express app entry point
-  ai/engine.js      - Claude-powered conversation engine with tool use
-  db/pool.js        - PostgreSQL connection pool
-  db/migrate.js     - Migration runner
-  db/migrations/    - SQL migration files
-  routes/
-    health.js       - Health check
-    practices.js    - Practice CRUD + knowledge base + appointments
-    chat.js         - Web chat endpoints
-    sms.js          - Twilio SMS webhook
-```
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `ANTHROPIC_API_KEY` | Yes | Anthropic API key for Claude |
-| `PORT` | No | Server port (default: 3000) |
-| `TWILIO_ACCOUNT_SID` | No | Twilio account SID (for SMS) |
-| `TWILIO_AUTH_TOKEN` | No | Twilio auth token (for SMS) |
-
-## Scripts
+### Scripts
 
 ```bash
 npm run dev       # Start dev server with auto-reload
@@ -103,14 +48,38 @@ npm run lint      # Run ESLint
 npm run db:migrate # Run database migrations
 ```
 
-## Tech Stack
+### API Endpoints
 
-- **Runtime**: Node.js 22
-- **Framework**: Express 5
-- **Database**: PostgreSQL
-- **AI**: Claude (Anthropic API) with tool use for appointment actions
-- **SMS**: Twilio
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/health` | Health check (includes DB status) |
+| GET | `/api/pipelines` | List all pipelines |
+| GET | `/api/pipelines/:id` | Get a single pipeline |
+| POST | `/api/pipelines` | Create a pipeline |
+| PATCH | `/api/pipelines/:id` | Update a pipeline |
+| DELETE | `/api/pipelines/:id` | Delete a pipeline |
 
----
+### Deployment
 
-Built by **EFF (Efficient Frontier)** — Autonomous passive income through automation.
+The app is containerized with Docker. Deploy to Railway, Fly.io, or any Docker-compatible host:
+
+```bash
+docker build -t reportbot .
+docker run -p 3000:3000 --env-file .env reportbot
+```
+
+## Architecture
+
+```
+src/
+  index.js           # Express app entry point
+  routes/
+    health.js        # Health check endpoint
+    pipelines.js     # Pipeline CRUD API
+  services/          # Business logic (scheduler, connectors, delivery)
+  db/
+    pool.js          # PostgreSQL connection pool
+    migrate.js       # Migration runner
+    migrations/      # SQL migration files
+  lib/               # Shared utilities
+```
