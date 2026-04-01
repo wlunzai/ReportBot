@@ -1,0 +1,33 @@
+{
+  "name": "reportbot",
+  "version": "0.1.0",
+  "description": "Scheduled Report & Alert Pipelines for business users",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test src/**/*.test.js",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "db:migrate": "node src/db/migrate.js"
+  },
+  "keywords": [
+    "automation",
+    "reports",
+    "alerts",
+    "scheduling"
+  ],
+  "author": "EFF (Efficient Frontier)",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^8.0.4",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "eslint": "^10.1.0"
+  }
+}
