@@ -2,24 +2,32 @@ import { Router } from 'express';
 import { pool } from '../db/pool.js';
 import { schedulePipeline, unschedulePipeline } from '../scheduler/engine.js';
 import { runPipeline } from '../pipeline/runner.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export const pipelinesRouter = Router();
 
+pipelinesRouter.use(requireAuth);
+
 pipelinesRouter.get('/', async (req, res) => {
   const { rows } = await pool.query(
-    'SELECT id, name, schedule, source_type, delivery_type, enabled, created_at FROM pipelines ORDER BY created_at DESC'
+    'SELECT id, name, schedule, source_type, delivery_type, enabled, created_at FROM pipelines WHERE user_id = $1 ORDER BY created_at DESC',
+    [req.userId]
   );
   res.json(rows);
 });
 
 pipelinesRouter.get('/:id', async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM pipelines WHERE id = $1', [req.params.id]);
+  const { rows } = await pool.query('SELECT * FROM pipelines WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
   if (rows.length === 0) return res.status(404).json({ error: 'Pipeline not found' });
   res.json(rows[0]);
 });
 
 // Get runs for a pipeline
 pipelinesRouter.get('/:id/runs', async (req, res) => {
+  // Verify pipeline belongs to user
+  const { rows: pRows } = await pool.query('SELECT id FROM pipelines WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
+  if (pRows.length === 0) return res.status(404).json({ error: 'Pipeline not found' });
+
   const limit = Math.min(parseInt(req.query.limit) || 20, 100);
   const { rows } = await pool.query(
     'SELECT * FROM pipeline_runs WHERE pipeline_id = $1 ORDER BY created_at DESC LIMIT $2',
@@ -36,10 +44,10 @@ pipelinesRouter.post('/', async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO pipelines (name, schedule, source_type, source_config, query_text, delivery_type, delivery_config, alert_condition)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO pipelines (name, schedule, source_type, source_config, query_text, delivery_type, delivery_config, alert_condition, user_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING *`,
-    [name, schedule, source_type, source_config || {}, query_text, delivery_type, delivery_config || {}, alert_condition || null]
+    [name, schedule, source_type, source_config || {}, query_text, delivery_type, delivery_config || {}, alert_condition || null, req.userId]
   );
 
   const pipeline = rows[0];
@@ -49,7 +57,7 @@ pipelinesRouter.post('/', async (req, res) => {
 
 // Trigger a manual run
 pipelinesRouter.post('/:id/run', async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM pipelines WHERE id = $1', [req.params.id]);
+  const { rows } = await pool.query('SELECT * FROM pipelines WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
   if (rows.length === 0) return res.status(404).json({ error: 'Pipeline not found' });
 
   try {
@@ -75,9 +83,9 @@ pipelinesRouter.patch('/:id', async (req, res) => {
 
   if (updates.length === 0) return res.status(400).json({ error: 'No valid fields to update' });
 
-  values.push(req.params.id);
+  values.push(req.params.id, req.userId);
   const { rows } = await pool.query(
-    `UPDATE pipelines SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx} RETURNING *`,
+    `UPDATE pipelines SET ${updates.join(', ')}, updated_at = NOW() WHERE id = $${idx} AND user_id = $${idx + 1} RETURNING *`,
     values
   );
   if (rows.length === 0) return res.status(404).json({ error: 'Pipeline not found' });
@@ -92,7 +100,7 @@ pipelinesRouter.patch('/:id', async (req, res) => {
 });
 
 pipelinesRouter.delete('/:id', async (req, res) => {
-  const { rowCount } = await pool.query('DELETE FROM pipelines WHERE id = $1', [req.params.id]);
+  const { rowCount } = await pool.query('DELETE FROM pipelines WHERE id = $1 AND user_id = $2', [req.params.id, req.userId]);
   if (rowCount === 0) return res.status(404).json({ error: 'Pipeline not found' });
   unschedulePipeline(req.params.id);
   res.status(204).end();

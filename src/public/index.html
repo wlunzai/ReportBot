@@ -9,6 +9,8 @@
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; color: #333; }
     header { background: #1a1a2e; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; }
     header h1 { font-size: 20px; font-weight: 600; }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .header-right span { font-size: 14px; opacity: 0.8; }
     .container { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
     .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.1); padding: 20px; margin-bottom: 16px; }
     .card h2 { font-size: 16px; margin-bottom: 12px; color: #1a1a2e; }
@@ -30,6 +32,7 @@
     .btn-run:hover { background: #218838; }
     .btn-danger { background: #dc3545; color: #fff; }
     .btn-danger:hover { background: #c82333; }
+    .btn-link { background: none; color: #fff; text-decoration: underline; cursor: pointer; border: none; font-size: 13px; }
     .actions { display: flex; gap: 6px; }
     .empty { text-align: center; padding: 40px; color: #999; }
     dialog { border: none; border-radius: 8px; padding: 24px; max-width: 560px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,.2); }
@@ -40,23 +43,62 @@
     .form-group textarea { height: 80px; font-family: monospace; }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+    .auth-page { max-width: 400px; margin: 80px auto; padding: 0 16px; }
+    .auth-page .card { padding: 32px; }
+    .auth-page h2 { text-align: center; margin-bottom: 20px; }
+    .auth-toggle { text-align: center; margin-top: 16px; font-size: 14px; }
+    .auth-toggle a { color: #1a1a2e; cursor: pointer; text-decoration: underline; }
+    .auth-error { color: #dc3545; font-size: 13px; margin-bottom: 12px; display: none; }
+    #app-dashboard { display: none; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>ReportBot</h1>
-    <button class="btn-primary" onclick="openCreateDialog()">+ New Pipeline</button>
-  </header>
-
-  <div class="container">
+  <!-- Auth Page -->
+  <div id="auth-page" class="auth-page">
     <div class="card">
-      <h2>Pipelines</h2>
-      <div id="pipelines-table"></div>
+      <h2 id="auth-title">Log In</h2>
+      <div class="auth-error" id="auth-error"></div>
+      <form id="auth-form" onsubmit="handleAuth(event)">
+        <div class="form-group">
+          <label>Email</label>
+          <input name="email" type="email" required placeholder="you@example.com">
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input name="password" type="password" required placeholder="Min 8 characters" minlength="8">
+        </div>
+        <div class="form-actions" style="justify-content:stretch">
+          <button type="submit" class="btn-primary" style="flex:1" id="auth-btn">Log In</button>
+        </div>
+      </form>
+      <div class="auth-toggle">
+        <span id="auth-toggle-text">Don't have an account?</span>
+        <a onclick="toggleAuthMode()" id="auth-toggle-link">Register</a>
+      </div>
     </div>
+  </div>
 
-    <div class="card">
-      <h2>Recent Runs</h2>
-      <div id="runs-table"></div>
+  <!-- Dashboard (shown after login) -->
+  <div id="app-dashboard">
+    <header>
+      <h1>ReportBot</h1>
+      <div class="header-right">
+        <span id="user-email"></span>
+        <button class="btn-link" onclick="logout()">Log out</button>
+        <button class="btn-primary" onclick="openCreateDialog()">+ New Pipeline</button>
+      </div>
+    </header>
+
+    <div class="container">
+      <div class="card">
+        <h2>Pipelines</h2>
+        <div id="pipelines-table"></div>
+      </div>
+
+      <div class="card">
+        <h2>Recent Runs</h2>
+        <div id="runs-table"></div>
+      </div>
     </div>
   </div>
 
@@ -118,14 +160,87 @@
 
   <script>
     const API = '/api';
+    let authMode = 'login'; // or 'register'
+    let token = localStorage.getItem('reportbot_token');
+    let userEmail = localStorage.getItem('reportbot_email');
+
+    function authHeaders() {
+      return { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+    }
+
+    function showAuth() {
+      document.getElementById('auth-page').style.display = 'block';
+      document.getElementById('app-dashboard').style.display = 'none';
+    }
+
+    function showDashboard() {
+      document.getElementById('auth-page').style.display = 'none';
+      document.getElementById('app-dashboard').style.display = 'block';
+      document.getElementById('user-email').textContent = userEmail;
+      load();
+    }
+
+    function toggleAuthMode() {
+      authMode = authMode === 'login' ? 'register' : 'login';
+      document.getElementById('auth-title').textContent = authMode === 'login' ? 'Log In' : 'Register';
+      document.getElementById('auth-btn').textContent = authMode === 'login' ? 'Log In' : 'Register';
+      document.getElementById('auth-toggle-text').textContent = authMode === 'login' ? "Don't have an account?" : 'Already have an account?';
+      document.getElementById('auth-toggle-link').textContent = authMode === 'login' ? 'Register' : 'Log In';
+      document.getElementById('auth-error').style.display = 'none';
+    }
+
+    async function handleAuth(e) {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      const errEl = document.getElementById('auth-error');
+      errEl.style.display = 'none';
+
+      const endpoint = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: f.get('email'), password: f.get('password') }),
+        });
+        const data = await res.json();
+        if (!res.ok) { errEl.textContent = data.error; errEl.style.display = 'block'; return; }
+
+        token = data.token;
+        userEmail = data.user.email;
+        localStorage.setItem('reportbot_token', token);
+        localStorage.setItem('reportbot_email', userEmail);
+        showDashboard();
+      } catch (err) {
+        errEl.textContent = 'Network error. Please try again.';
+        errEl.style.display = 'block';
+      }
+    }
+
+    function logout() {
+      token = null;
+      userEmail = null;
+      localStorage.removeItem('reportbot_token');
+      localStorage.removeItem('reportbot_email');
+      showAuth();
+    }
+
+    async function apiFetch(url, opts = {}) {
+      const res = await fetch(url, { ...opts, headers: { ...authHeaders(), ...opts.headers } });
+      if (res.status === 401) { logout(); throw new Error('Session expired'); }
+      return res;
+    }
 
     async function load() {
-      const [pipelines, runs] = await Promise.all([
-        fetch(`${API}/pipelines`).then(r => r.json()),
-        fetch(`${API}/runs`).then(r => r.json()),
-      ]);
-      renderPipelines(pipelines);
-      renderRuns(runs);
+      try {
+        const [pipelines, runs] = await Promise.all([
+          apiFetch(`${API}/pipelines`).then(r => r.json()),
+          apiFetch(`${API}/runs`).then(r => r.json()),
+        ]);
+        renderPipelines(pipelines);
+        renderRuns(runs);
+      } catch (err) {
+        if (err.message === 'Session expired') return;
+      }
     }
 
     function renderPipelines(pipelines) {
@@ -185,25 +300,32 @@
         alert_condition: f.get('alert_condition') || null,
       };
 
-      const res = await fetch(`${API}/pipelines`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await apiFetch(`${API}/pipelines`, { method: 'POST', body: JSON.stringify(body) });
       if (res.ok) { document.getElementById('create-dialog').close(); e.target.reset(); load(); }
       else { const err = await res.json(); alert(err.error); }
     }
 
     async function triggerRun(id) {
-      const res = await fetch(`${API}/pipelines/${id}/run`, { method: 'POST' });
+      const res = await apiFetch(`${API}/pipelines/${id}/run`, { method: 'POST' });
       if (res.ok) { alert('Run completed!'); load(); }
       else { const err = await res.json(); alert('Run failed: ' + err.error); }
     }
 
     async function deletePipeline(id) {
       if (!confirm('Delete this pipeline?')) return;
-      await fetch(`${API}/pipelines/${id}`, { method: 'DELETE' });
+      await apiFetch(`${API}/pipelines/${id}`, { method: 'DELETE' });
       load();
     }
 
-    load();
-    setInterval(load, 15000);
+    // Init: check if we have a valid token
+    if (token) {
+      apiFetch('/api/auth/me').then(r => {
+        if (r.ok) showDashboard();
+        else logout();
+      }).catch(() => logout());
+    } else {
+      showAuth();
+    }
   </script>
 </body>
 </html>

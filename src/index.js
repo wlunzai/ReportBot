@@ -3,6 +3,7 @@ import express from 'express';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { healthRouter } from './routes/health.js';
+import { authRouter } from './routes/auth.js';
 import { pipelinesRouter } from './routes/pipelines.js';
 import { runsRouter } from './routes/runs.js';
 import { loadAllPipelines, getScheduledCount } from './scheduler/engine.js';
@@ -16,6 +17,7 @@ app.use(express.json());
 
 // API routes
 app.use('/api/health', healthRouter);
+app.use('/api/auth', authRouter);
 app.use('/api/pipelines', pipelinesRouter);
 app.use('/api/runs', runsRouter);
 
