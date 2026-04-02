@@ -25,10 +25,11 @@ app.use('/api/pipelines', pipelinesRouter);
 app.use('/api/runs', runsRouter);
 app.use('/api/billing', billingRouter);
 
-// Serve web UI
-app.use(express.static(join(__dirname, 'public')));
+// Serve web UI — explicit routes must come before express.static to prevent
+// index.html from being auto-served at / by the static middleware
 app.get('/', (req, res) => res.sendFile(join(__dirname, 'public', 'landing.html')));
 app.get('/dashboard', (req, res) => res.sendFile(join(__dirname, 'public', 'index.html')));
+app.use(express.static(join(__dirname, 'public')));
 
 app.listen(PORT, async () => {
   console.log(`ReportBot API listening on port ${PORT}`);
