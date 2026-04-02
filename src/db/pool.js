@@ -15,7 +15,13 @@ function getDatabaseUrl() {
   return undefined;
 }
 
+const connectionString = getDatabaseUrl();
+
 export const pool = new pg.Pool({
-  connectionString: getDatabaseUrl(),
+  connectionString,
   max: 10,
+  // Railway Postgres requires SSL for external connections
+  ...(connectionString && !connectionString.includes('localhost') && !connectionString.includes('127.0.0.1')
+    ? { ssl: { rejectUnauthorized: false } }
+    : {}),
 });
