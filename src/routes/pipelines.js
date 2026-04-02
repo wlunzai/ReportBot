@@ -3,6 +3,7 @@ import { pool } from '../db/pool.js';
 import { schedulePipeline, unschedulePipeline } from '../scheduler/engine.js';
 import { runPipeline } from '../pipeline/runner.js';
 import { requireAuth } from '../middleware/auth.js';
+import { PLAN_LIMITS } from './billing.js';
 
 export const pipelinesRouter = Router();
 
@@ -41,6 +42,21 @@ pipelinesRouter.post('/', async (req, res) => {
 
   if (!name || !schedule || !source_type || !query_text || !delivery_type) {
     return res.status(400).json({ error: 'Missing required fields: name, schedule, source_type, query_text, delivery_type' });
+  }
+
+  // Enforce plan pipeline limits
+  const { rows: userRows } = await pool.query('SELECT plan FROM users WHERE id = $1', [req.userId]);
+  const plan = userRows[0]?.plan || 'free';
+  const limit = PLAN_LIMITS[plan] ?? 3;
+
+  const { rows: countRows } = await pool.query(
+    'SELECT COUNT(*)::int AS count FROM pipelines WHERE user_id = $1',
+    [req.userId]
+  );
+  if (countRows[0].count >= limit) {
+    return res.status(402).json({
+      error: `Pipeline limit reached (${limit} on ${plan} plan). Upgrade to create more pipelines.`,
+    });
   }
 
   const { rows } = await pool.query(

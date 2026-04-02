@@ -49,6 +49,15 @@
     .auth-toggle { text-align: center; margin-top: 16px; font-size: 14px; }
     .auth-toggle a { color: #1a1a2e; cursor: pointer; text-decoration: underline; }
     .auth-error { color: #dc3545; font-size: 13px; margin-bottom: 12px; display: none; }
+    .plans { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 12px; }
+    .plan-card { border: 2px solid #eee; border-radius: 8px; padding: 20px; text-align: center; }
+    .plan-card.active { border-color: #1a1a2e; background: #f0f0ff; }
+    .plan-card h3 { margin-bottom: 8px; }
+    .plan-card .price { font-size: 24px; font-weight: 700; color: #1a1a2e; }
+    .plan-card .price span { font-size: 14px; font-weight: 400; color: #666; }
+    .plan-card ul { list-style: none; margin: 12px 0; font-size: 14px; color: #555; }
+    .plan-card ul li { padding: 4px 0; }
+    .plan-card .btn-upgrade { margin-top: 12px; }
     #app-dashboard { display: none; }
   </style>
 </head>
@@ -90,6 +99,31 @@
     </header>
 
     <div class="container">
+      <div class="card" id="billing-card">
+        <h2>Billing</h2>
+        <div id="billing-info"></div>
+        <div class="plans">
+          <div class="plan-card" id="plan-free">
+            <h3>Free</h3>
+            <div class="price">$0</div>
+            <ul><li>3 pipelines</li><li>Community support</li></ul>
+            <span class="badge badge-enabled" id="free-badge" style="display:none">Current Plan</span>
+          </div>
+          <div class="plan-card" id="plan-pro">
+            <h3>Pro</h3>
+            <div class="price">$29<span>/mo</span></div>
+            <ul><li>25 pipelines</li><li>Priority support</li></ul>
+            <button class="btn-primary btn-upgrade" onclick="upgradePlan('pro')" id="pro-btn">Upgrade</button>
+          </div>
+          <div class="plan-card" id="plan-business">
+            <h3>Business</h3>
+            <div class="price">$99<span>/mo</span></div>
+            <ul><li>Unlimited pipelines</li><li>Dedicated support</li></ul>
+            <button class="btn-primary btn-upgrade" onclick="upgradePlan('business')" id="business-btn">Upgrade</button>
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <h2>Pipelines</h2>
         <div id="pipelines-table"></div>
@@ -178,6 +212,7 @@
       document.getElementById('app-dashboard').style.display = 'block';
       document.getElementById('user-email').textContent = userEmail;
       load();
+      loadBilling();
     }
 
     function toggleAuthMode() {
@@ -278,6 +313,41 @@
     }
 
     function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+    async function loadBilling() {
+      try {
+        const res = await apiFetch(`${API}/billing/plan`);
+        if (!res.ok) return;
+        const data = await res.json();
+        const limitText = data.pipelineLimit === Infinity ? 'unlimited' : data.pipelineLimit;
+        document.getElementById('billing-info').innerHTML =
+          `<p>Current plan: <strong>${data.plan}</strong> &mdash; ${data.pipelineCount} / ${limitText} pipelines used</p>`;
+
+        // Highlight active plan
+        ['free', 'pro', 'business'].forEach(p => {
+          document.getElementById('plan-' + p).classList.toggle('active', data.plan === p);
+        });
+        document.getElementById('free-badge').style.display = data.plan === 'free' ? 'inline' : 'none';
+        document.getElementById('pro-btn').textContent = data.plan === 'pro' ? 'Current Plan' : 'Upgrade';
+        document.getElementById('pro-btn').disabled = data.plan === 'pro' || data.plan === 'business';
+        document.getElementById('business-btn').textContent = data.plan === 'business' ? 'Current Plan' : 'Upgrade';
+        document.getElementById('business-btn').disabled = data.plan === 'business';
+      } catch {}
+    }
+
+    async function upgradePlan(plan) {
+      try {
+        const res = await apiFetch(`${API}/billing/checkout`, {
+          method: 'POST',
+          body: JSON.stringify({ plan }),
+        });
+        if (!res.ok) { const err = await res.json(); alert(err.error); return; }
+        const data = await res.json();
+        window.location.href = data.url;
+      } catch (err) {
+        alert('Failed to start checkout: ' + err.message);
+      }
+    }
 
     function openCreateDialog() { document.getElementById('create-dialog').showModal(); }
 

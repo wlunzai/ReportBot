@@ -68,7 +68,7 @@ authRouter.get('/me', async (req, res) => {
 
   try {
     const payload = jwt.verify(authHeader.slice(7), JWT_SECRET);
-    const { rows } = await pool.query('SELECT id, email, created_at FROM users WHERE id = $1', [payload.userId]);
+    const { rows } = await pool.query('SELECT id, email, plan, created_at FROM users WHERE id = $1', [payload.userId]);
     if (rows.length === 0) return res.status(401).json({ error: 'User not found' });
     res.json(rows[0]);
   } catch {

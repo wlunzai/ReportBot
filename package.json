@@ -29,7 +29,8 @@
     "luxon": "^3.7.2",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.4",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "stripe": "^21.0.1"
   },
   "devDependencies": {
     "eslint": "^10.1.0"
