@@ -1,6 +1,5 @@
 import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'changeme-dev-secret';
+import JWT_SECRET from '../lib/jwt-secret.js';
 
 export function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
