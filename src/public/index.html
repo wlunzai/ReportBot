@@ -145,8 +145,16 @@
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Schedule (cron)</label>
-          <input name="schedule" required placeholder="0 9 * * *" title="Cron expression">
+          <label>Schedule</label>
+          <select name="schedule_preset" onchange="handleSchedulePreset(this)">
+            <option value="0 8 * * *">Daily at 8 AM</option>
+            <option value="0 0 * * *">Daily at midnight</option>
+            <option value="0 9 * * 1">Every Monday at 9 AM</option>
+            <option value="0 * * * *">Every hour</option>
+            <option value="custom">Custom</option>
+          </select>
+          <input name="schedule" type="hidden" value="0 8 * * *">
+          <input name="schedule_custom" style="display:none;margin-top:6px" placeholder="0 9 * * *" title="Cron expression">
         </div>
         <div class="form-group">
           <label>Timezone</label>
@@ -156,30 +164,40 @@
       <div class="form-row">
         <div class="form-group">
           <label>Source Type</label>
-          <select name="source_type">
+          <select name="source_type" onchange="updateSourceFields(this.value)">
             <option value="postgres">PostgreSQL</option>
             <option value="google_sheets">Google Sheets</option>
           </select>
         </div>
         <div class="form-group">
           <label>Delivery Type</label>
-          <select name="delivery_type">
+          <select name="delivery_type" onchange="updateDeliveryFields(this.value)">
             <option value="email">Email</option>
             <option value="slack">Slack</option>
           </select>
         </div>
       </div>
-      <div class="form-group">
-        <label>Source Config (JSON)</label>
-        <textarea name="source_config" placeholder='{"connection_string": "postgresql://..."}'></textarea>
+      <div id="source-fields">
+        <div class="form-group"><label>Host</label><input name="src_host" placeholder="localhost"></div>
+        <div class="form-row">
+          <div class="form-group"><label>Port</label><input name="src_port" type="number" value="5432"></div>
+          <div class="form-group"><label>Database</label><input name="src_database" placeholder="mydb"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Username</label><input name="src_username" placeholder="postgres"></div>
+          <div class="form-group"><label>Password</label><input name="src_password" type="password" placeholder="••••••"></div>
+        </div>
+        <div class="form-group"><label style="font-size:13px"><input type="checkbox" name="src_ssl" style="width:auto;margin-right:6px">Use SSL</label></div>
       </div>
       <div class="form-group">
         <label>Query</label>
         <textarea name="query_text" required placeholder="SELECT * FROM sales WHERE date = CURRENT_DATE"></textarea>
       </div>
-      <div class="form-group">
-        <label>Delivery Config (JSON)</label>
-        <textarea name="delivery_config" placeholder='{"to": "team@example.com"}'></textarea>
+      <div id="delivery-fields">
+        <div class="form-row">
+          <div class="form-group"><label>To address</label><input name="dlv_to" type="email" placeholder="team@example.com"></div>
+          <div class="form-group"><label>Subject</label><input name="dlv_subject" placeholder="Daily Sales Report"></div>
+        </div>
       </div>
       <div class="form-group">
         <label>Alert Condition (optional)</label>
@@ -349,19 +367,93 @@
       }
     }
 
-    function openCreateDialog() { document.getElementById('create-dialog').showModal(); }
+    function openCreateDialog() {
+      document.getElementById('create-dialog').showModal();
+      updateSourceFields('postgres');
+      updateDeliveryFields('email');
+    }
+
+    function handleSchedulePreset(sel) {
+      const customInput = document.querySelector('[name="schedule_custom"]');
+      const hiddenInput = document.querySelector('[name="schedule"]');
+      if (sel.value === 'custom') {
+        customInput.style.display = 'block';
+        customInput.required = true;
+        hiddenInput.value = customInput.value;
+      } else {
+        customInput.style.display = 'none';
+        customInput.required = false;
+        hiddenInput.value = sel.value;
+      }
+    }
+
+    function updateSourceFields(type) {
+      const container = document.getElementById('source-fields');
+      if (type === 'postgres') {
+        container.innerHTML = `
+          <div class="form-group"><label>Host</label><input name="src_host" placeholder="localhost"></div>
+          <div class="form-row">
+            <div class="form-group"><label>Port</label><input name="src_port" type="number" value="5432"></div>
+            <div class="form-group"><label>Database</label><input name="src_database" placeholder="mydb"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Username</label><input name="src_username" placeholder="postgres"></div>
+            <div class="form-group"><label>Password</label><input name="src_password" type="password" placeholder="••••••"></div>
+          </div>
+          <div class="form-group"><label style="font-size:13px"><input type="checkbox" name="src_ssl" style="width:auto;margin-right:6px">Use SSL</label></div>`;
+      } else {
+        container.innerHTML = `
+          <div class="form-group"><label>Spreadsheet ID</label><input name="src_spreadsheet_id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms"></div>
+          <div class="form-group"><label>Sheet name</label><input name="src_sheet_name" placeholder="Sheet1"></div>`;
+      }
+    }
+
+    function updateDeliveryFields(type) {
+      const container = document.getElementById('delivery-fields');
+      if (type === 'email') {
+        container.innerHTML = `
+          <div class="form-row">
+            <div class="form-group"><label>To address</label><input name="dlv_to" type="email" placeholder="team@example.com"></div>
+            <div class="form-group"><label>Subject</label><input name="dlv_subject" placeholder="Daily Sales Report"></div>
+          </div>`;
+      } else {
+        container.innerHTML = `
+          <div class="form-group"><label>Slack Webhook URL</label><input name="dlv_webhook_url" type="url" placeholder="https://hooks.slack.com/services/..."></div>`;
+      }
+    }
+
+    function buildSourceConfig(f) {
+      const type = f.get('source_type');
+      if (type === 'postgres') {
+        const cfg = { host: f.get('src_host'), port: parseInt(f.get('src_port')) || 5432, database: f.get('src_database'), username: f.get('src_username'), password: f.get('src_password') };
+        if (f.get('src_ssl')) cfg.ssl = true;
+        return cfg;
+      }
+      return { spreadsheet_id: f.get('src_spreadsheet_id'), sheet_name: f.get('src_sheet_name') };
+    }
+
+    function buildDeliveryConfig(f) {
+      const type = f.get('delivery_type');
+      if (type === 'email') return { to: f.get('dlv_to'), subject: f.get('dlv_subject') };
+      return { webhook_url: f.get('dlv_webhook_url') };
+    }
 
     async function createPipeline(e) {
       e.preventDefault();
       const f = new FormData(e.target);
-      let sourceConfig, deliveryConfig;
-      try { sourceConfig = JSON.parse(f.get('source_config') || '{}'); } catch { alert('Invalid source config JSON'); return; }
-      try { deliveryConfig = JSON.parse(f.get('delivery_config') || '{}'); } catch { alert('Invalid delivery config JSON'); return; }
+
+      // Sync custom cron if active
+      const preset = f.get('schedule_preset');
+      const schedule = preset === 'custom' ? f.get('schedule_custom') : f.get('schedule');
+      if (!schedule) { alert('Please enter a cron schedule'); return; }
+
+      const sourceConfig = buildSourceConfig(f);
       sourceConfig.timezone = f.get('timezone');
+      const deliveryConfig = buildDeliveryConfig(f);
 
       const body = {
         name: f.get('name'),
-        schedule: f.get('schedule'),
+        schedule,
         source_type: f.get('source_type'),
         source_config: sourceConfig,
         query_text: f.get('query_text'),
