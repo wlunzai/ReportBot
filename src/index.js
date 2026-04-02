@@ -27,7 +27,8 @@ app.use('/api/billing', billingRouter);
 
 // Serve web UI
 app.use(express.static(join(__dirname, 'public')));
-app.get('/', (req, res) => res.sendFile(join(__dirname, 'public', 'index.html')));
+app.get('/', (req, res) => res.sendFile(join(__dirname, 'public', 'landing.html')));
+app.get('/dashboard', (req, res) => res.sendFile(join(__dirname, 'public', 'index.html')));
 
 app.listen(PORT, async () => {
   console.log(`ReportBot API listening on port ${PORT}`);
