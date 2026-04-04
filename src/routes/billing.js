@@ -3,7 +3,9 @@ import Stripe from 'stripe';
 import { pool } from '../db/pool.js';
 import { requireAuth } from '../middleware/auth.js';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
 
 export const PLAN_LIMITS = {
   free: 3,
@@ -17,6 +19,11 @@ const PRICE_IDS = {
 };
 
 export const billingRouter = Router();
+
+function requireStripe(req, res, next) {
+  if (!stripe) return res.status(503).json({ error: 'Billing is not configured' });
+  next();
+}
 
 // Get current plan info
 billingRouter.get('/plan', requireAuth, async (req, res) => {
@@ -41,7 +48,7 @@ billingRouter.get('/plan', requireAuth, async (req, res) => {
 });
 
 // Create Stripe Checkout session for upgrade
-billingRouter.post('/checkout', requireAuth, async (req, res) => {
+billingRouter.post('/checkout', requireAuth, requireStripe, async (req, res) => {
   const { plan } = req.body;
 
   if (!plan || !PRICE_IDS[plan]) {
@@ -74,7 +81,7 @@ billingRouter.post('/checkout', requireAuth, async (req, res) => {
 });
 
 // Stripe webhook handler
-billingRouter.post('/webhook', async (req, res) => {
+billingRouter.post('/webhook', requireStripe, async (req, res) => {
   const sig = req.headers['stripe-signature'];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
